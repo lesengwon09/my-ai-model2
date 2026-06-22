@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 자세 감시관 (AI Pose Guard)</title>
+
+<style>
+    /* 기본 화이트 & 그레이 톤 */
+    body {
+        font-family: 'Segoe UI', sans-serif;
+        background-color: #f5f5f7;
+        color: #333;
+        margin: 0;
+        min-height: 100vh;
+
+        display: flex;
+        justify-content: center;
+        align-items: center;
+
+        transition: background-color 0.3s;
+    }
+
+    .container {
+        text-align: center;
+    }
+
+    h1 {
+        margin-bottom: 20px;
+    }
+
+    /* 상태 표시 */
+    #status-display {
+            font-size: 28px;
+        font-weight: bold;
+        margin-bottom: 25px;
+        padding: 15px 25px;
+        background-color: rgba(255,255,255,0.9);
+        border-radius: 12px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+        transition: 0.3s;
+    }
+
+    /* 웹캠 박스 */
+    #webcam-container {
+        width: 200px;
+        height: 200px;
+        margin: auto;
+        border-radius: 20px;
+        overflow: hidden;
+        box-shadow: 0 10px 20px rgba(0,0,0,0.15);
+        border: 4px solid #e5e5e7;
+        background-color: black;
+    }
+
+    button {
+        margin-top: 25px;
+        padding: 12px 30px;
+        font-size: 16px;
+        border: none;
+        border-radius: 10px;
+        background-color: #0071e3;
+        color: white;
+        cursor: pointer;
+    }
+
+    button:hover {
+        background-color: #0057b8;
+    }
+
+    #label-container{
+        margin-top:20px;
+        font-size:14px;
+        color:#666;
+    }
+
+    /* 경고 상태 */
+    body.warning-bg{
+        background-color:#ff0000;
+    }   
+
+/* bad_pose일 때 상태창 배경도 어둡게 변경 */
+    body.warning-bg #status-display{
+        background-color: rgba(0,0,0,0.7);
+    }
+
+    .warning-text{
+        color:white !important;
+        animation: blink 1s infinite alternate;
+    }
+
+    @keyframes blink{
+        from{
+            opacity:1;
+        }
+        to{
+            opacity:0.2;
+        }
+    }
+
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <h1>AI 자세 감시관</h1>
+
+    <div id="status-display">
+        버튼을 눌러 AI 감독을 시작하세요.
+    </div>
+
+    <button onclick="init()">AI 시작하기</button>
+
+    <div id="webcam-container"></div>
+
+    <div id="label-container"></div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+
+<script>
+
+const URL = "https://teachablemachine.withgoogle.com/models/A-4PNbyjF/";
+
+let model, webcam, labelContainer, maxPredictions;
+let statusDisplay;
+
+async function init() {
+
+    statusDisplay = document.getElementById("status-display");
+
+    const modelURL = URL + "model.json";
+    const metadataURL = URL + "metadata.json";
+
+    model = await tmImage.load(modelURL, metadataURL);
+    maxPredictions = model.getTotalClasses();
+
+    const flip = true;
+
+    webcam = new tmImage.Webcam(200,200,flip);
+
+    await webcam.setup();
+    await webcam.play();
+
+    window.requestAnimationFrame(loop);
+
+    document.getElementById("webcam-container").appendChild(webcam.canvas);
+
+    labelContainer = document.getElementById("label-container");
+
+    for(let i=0;i<maxPredictions;i++){
+        labelContainer.appendChild(document.createElement("div"));
+    }
+
+    statusDisplay.innerHTML = "AI 자세 감시 시작 👍";
+}
+
+async function loop(){
+    webcam.update();
+    await predict();
+    window.requestAnimationFrame(loop);
+}
+
+async function predict(){
+
+    const prediction = await model.predict(webcam.canvas);
+
+    let highestClass = "";
+    let highestProbability = 0;
+
+    for(let i=0;i<maxPredictions;i++){
+
+        const className = prediction[i].className;
+        const probability = prediction[i].probability;
+
+        labelContainer.childNodes[i].innerHTML =
+        className + " : " + probability.toFixed(2);
+
+        if(probability > highestProbability){
+            highestProbability = probability;
+            highestClass = className;
+        }
+    }
+
+    // good_pose
+    if(highestClass === "good_pose"){
+
+        document.body.classList.remove("warning-bg");
+
+        statusDisplay.classList.remove("warning-text");
+
+        statusDisplay.style.color = "#00875a";
+
+        statusDisplay.innerHTML =
+        "정상 : 바르고 집중력 있는 자세입니다. 👍";
+    }
+
+    // bad_pose
+    else if(highestClass === "bad_pose"){
+
+        document.body.classList.add("warning-bg");
+
+        statusDisplay.classList.add("warning-text");
+
+        statusDisplay.style.color = "white";
+
+        statusDisplay.innerHTML =
+        "🚨 경고 : 자세가 흐트러졌습니다! 턱을 풀거나 어서 일어나세요!";
+    }
+
+}
+
+</script>
+
+</body>
+</html>
